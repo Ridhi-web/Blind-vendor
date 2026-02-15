@@ -11,7 +11,7 @@ import {
   VerifyQualificationParams,
   CheckComplianceParams,
   CONTRACT_CONFIG
-} from './ContractService';
+} from '../services/ContractService';
 
 // ============================================================================
 // VERIFY QUALIFICATION HOOK
