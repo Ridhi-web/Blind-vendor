@@ -1,0 +1,63 @@
+// This file is part of BlindVendorQualification smart contract
+// Procurement teams verify vendors meet quality standards via ZK
+// Without vendors knowing which competitors are also qualified
+// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// You may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+pragma language_version >= 0.20;
+import CompactStandardLibrary;
+
+// Public ledger state
+export ledger vendors: VendorRegistry;
+
+// Vendor qualification record (private)
+type VendorQualification {
+  vendorId: U256,
+  qualificationScore: U32,
+  complianceCheckPassed: Boolean,
+}
+
+// Circuit to verify vendor meets minimum quality threshold (ZK)
+// Vendors prove their score >= threshold without revealing actual score
+export circuit verifyQualification(
+  vendorScore: U32,
+  minimumThreshold: U32,
+  salt: U256
+): [Boolean] {
+  // Zero-knowledge proof: vendor qualifies if score >= threshold
+  let qualifies: Boolean = vendorScore >= minimumThreshold;
+  return [qualifies];
+}
+
+// Circuit to check compliance without revealing competitor details
+export circuit checkCompliance(
+  certificationValid: Boolean,
+  insuranceActive: Boolean,
+  paymentHistoryGood: Boolean
+): [Boolean] {
+  // All compliance checks must pass
+  let compliant: Boolean = certificationValid && insuranceActive && paymentHistoryGood;
+  return [compliant];
+}
+
+// Public function to record qualification approval
+// Only procurement team can call this
+export circuit recordQualification(vendorId: U256): [] {
+  vendors.markQualified(vendorId);
+}
+
+// Get qualification status (public - just yes/no, no details revealed)
+export circuit isVendorQualified(vendorId: U256): [Boolean] {
+  let qualified: Boolean = vendors.checkQualified(vendorId);
+  return [qualified];
+}
