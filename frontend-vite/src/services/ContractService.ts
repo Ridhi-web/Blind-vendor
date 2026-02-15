@@ -74,11 +74,11 @@ export class VendorQualificationService {
     
     try {
       // In production with real contract integration:
-      // const result = await this.contractInstance.verifyQualification(
-      //   vendorScore,
-      //   minimumThreshold,
-      //   salt
-      // );
+      const result = await this.contractInstance.verifyQualification(
+        vendorScore,
+        minimumThreshold,
+        salt
+      );
       
       // Simulated contract call
       const qualifies = vendorScore >= minimumThreshold;
