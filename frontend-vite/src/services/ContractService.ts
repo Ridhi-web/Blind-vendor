@@ -47,6 +47,8 @@ export interface SmartContractResponse {
   error?: string;
   timestamp: string;
   contractAddress: string;
+  transactionHash?: string;
+  gasUsed?: string;
 }
 
 // ============================================================================
@@ -59,10 +61,25 @@ export interface SmartContractResponse {
  */
 export class VendorQualificationService {
   private contractAddress: string;
-  private vendorRegistry: Set<number> = new Set();
+  private contractInstance: any | null = null;
 
   constructor(contractAddress: string = CONTRACT_CONFIG.ADDRESS) {
     this.contractAddress = contractAddress;
+  }
+
+  /**
+   * Attach an instantiated Midnight contract so all calls hit the chain directly
+   */
+  bindContractInstance(instance: any) {
+    this.contractInstance = instance;
+  }
+
+  private getContractOrThrow() {
+    if (!this.contractInstance) {
+      throw new Error('Contract instance not attached. Call bindContractInstance() with a real Midnight contract.');
+    }
+
+    return this.contractInstance;
   }
 
   /**
@@ -73,15 +90,12 @@ export class VendorQualificationService {
     const { vendorScore, minimumThreshold, salt } = params;
     
     try {
-      // In production with real contract integration:
-      const result = await this.contractInstance.verifyQualification(
+      const contract = this.getContractOrThrow();
+      const result = await contract.verifyQualification(
         vendorScore,
         minimumThreshold,
         salt
       );
-      
-      // Simulated contract call
-      const qualifies = vendorScore >= minimumThreshold;
 
       return {
         method: 'verifyQualification',
@@ -90,16 +104,18 @@ export class VendorQualificationService {
           minimumThreshold,
           salt: salt.toString(),
         },
-        result: qualifies,
+        result: Array.isArray(result) ? result[0] : result,
         contractCall: {
           circuit: 'verifyQualification',
           input: `[${vendorScore}, ${minimumThreshold}, ${salt}]`,
-          output: `[${qualifies}]`,
+          output: Array.isArray(result) ? `[${result[0]}]` : JSON.stringify(result),
           zkProof: `Proves vendorScore (${vendorScore}) >= minimumThreshold (${minimumThreshold}) without revealing score`,
           privacyLevel: 'FULL_ZERO_KNOWLEDGE'
         },
         timestamp: new Date().toISOString(),
-        contractAddress: this.contractAddress
+        contractAddress: this.contractAddress,
+        transactionHash: result?.transactionHash,
+        gasUsed: result?.gasUsed?.toString()
       };
     } catch (error) {
       return {
@@ -120,24 +136,21 @@ export class VendorQualificationService {
     const { certificationValid, insuranceActive, paymentHistoryGood } = params;
     
     try {
-      // In production with real contract integration:
-      // const result = await this.contractInstance.checkCompliance(
-      //   certificationValid,
-      //   insuranceActive,
-      //   paymentHistoryGood
-      // );
-      
-      // Simulated contract call
-      const compliant = certificationValid && insuranceActive && paymentHistoryGood;
+      const contract = this.getContractOrThrow();
+      const result = await contract.checkCompliance(
+        certificationValid,
+        insuranceActive,
+        paymentHistoryGood
+      );
 
       return {
         method: 'checkCompliance',
         params,
-        result: compliant,
+        result: Array.isArray(result) ? result[0] : result,
         contractCall: {
           circuit: 'checkCompliance',
           input: `[${certificationValid}, ${insuranceActive}, ${paymentHistoryGood}]`,
-          output: `[${compliant}]`,
+          output: Array.isArray(result) ? `[${result[0]}]` : JSON.stringify(result),
           logic: `certification AND insurance AND paymentHistory`,
           criteria: {
             certification: certificationValid ? '✓' : '✗',
@@ -147,7 +160,9 @@ export class VendorQualificationService {
           privacyLevel: 'FULL_ZERO_KNOWLEDGE'
         },
         timestamp: new Date().toISOString(),
-        contractAddress: this.contractAddress
+        contractAddress: this.contractAddress,
+        transactionHash: result?.transactionHash,
+        gasUsed: result?.gasUsed?.toString()
       };
     } catch (error) {
       return {
@@ -165,11 +180,8 @@ export class VendorQualificationService {
    */
   async recordQualification(vendorId: number): Promise<SmartContractResponse> {
     try {
-      // In production with real contract integration:
-      // const result = await this.contractInstance.recordQualification(vendorId);
-      
-      // Simulated contract call
-      this.vendorRegistry.add(vendorId);
+      const contract = this.getContractOrThrow();
+      const result = await contract.recordQualification(vendorId);
 
       return {
         method: 'recordQualification',
@@ -177,14 +189,15 @@ export class VendorQualificationService {
         contractCall: {
           circuit: 'recordQualification',
           input: `[${vendorId}]`,
-          output: 'Vendor marked as qualified',
+          output: Array.isArray(result) ? JSON.stringify(result) : 'Vendor marked as qualified',
           ledgerUpdate: `vendors.markQualified(${vendorId})`,
-          registrySize: this.vendorRegistry.size,
           privacyLevel: 'PUBLIC',
           note: 'This is a public transaction visible on-chain'
         },
         timestamp: new Date().toISOString(),
-        contractAddress: this.contractAddress
+        contractAddress: this.contractAddress,
+        transactionHash: result?.transactionHash,
+        gasUsed: result?.gasUsed?.toString()
       };
     } catch (error) {
       return {
@@ -203,11 +216,9 @@ export class VendorQualificationService {
    */
   async isVendorQualified(vendorId: number): Promise<SmartContractResponse> {
     try {
-      // In production with real contract integration:
-      // const result = await this.contractInstance.isVendorQualified(vendorId);
-      
-      // Simulated contract call
-      const qualified = this.vendorRegistry.has(vendorId);
+      const contract = this.getContractOrThrow();
+      const result = await contract.isVendorQualified(vendorId);
+      const qualified = Array.isArray(result) ? result[0] : result;
 
       return {
         method: 'isVendorQualified',
@@ -216,13 +227,15 @@ export class VendorQualificationService {
         contractCall: {
           circuit: 'isVendorQualified',
           input: `[${vendorId}]`,
-          output: `[${qualified}]`,
+          output: Array.isArray(result) ? `[${result[0]}]` : JSON.stringify(result),
           status: qualified ? 'QUALIFIED' : 'NOT_QUALIFIED',
           privacyNote: 'Only yes/no returned. Score and details are never revealed.',
           privacyLevel: 'PRIVACY_PRESERVING'
         },
         timestamp: new Date().toISOString(),
-        contractAddress: this.contractAddress
+        contractAddress: this.contractAddress,
+        transactionHash: result?.transactionHash,
+        gasUsed: result?.gasUsed?.toString()
       };
     } catch (error) {
       return {
@@ -233,27 +246,6 @@ export class VendorQualificationService {
         contractAddress: this.contractAddress
       };
     }
-  }
-
-  /**
-   * Get all qualified vendors
-   */
-  getQualifiedVendors(): number[] {
-    return Array.from(this.vendorRegistry).sort((a, b) => a - b);
-  }
-
-  /**
-   * Get vendor registry size
-   */
-  getRegistrySize(): number {
-    return this.vendorRegistry.size;
-  }
-
-  /**
-   * Clear registry (for testing/reset)
-   */
-  clearRegistry(): void {
-    this.vendorRegistry.clear();
   }
 
   /**
